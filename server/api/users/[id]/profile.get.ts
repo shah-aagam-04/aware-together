@@ -1,5 +1,8 @@
 import fs from 'node:fs'
 import path from 'node:path'
+import { db } from '../../../utils/db'
+import { user } from '../../../db/schema'
+import { eq } from 'drizzle-orm'
 
 export default defineEventHandler(async (event) => {
   const session = await auth.api.getSession({
@@ -16,14 +19,10 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, statusMessage: 'Missing userId' })
   }
 
-  const record = await prisma.user.findUnique({
-    where: {
-      id: userId,
-    },
-    select: {
-      image: true,
-    },
-  })
+  const [record] = await db
+    .select({ image: user.image })
+    .from(user)
+    .where(eq(user.id, userId))
 
   const imagePath = record?.image
 
@@ -34,17 +33,6 @@ export default defineEventHandler(async (event) => {
   }
 
   const fileStream = fs.createReadStream(filePath)
-
-  // Set content type based on file extension
-  // const ext = path.extname(filePath).toLowerCase()
-
-  // Defaults to octet stream as file types are NOT saved
-  // const mime =
-  //   ext === ".png" ? "image/png" :
-  //   ext === ".jpg" || ext === ".jpeg" ? "image/jpeg" :
-  //   ext === ".gif" ? "image/gif" :
-  //   ext === ".webp" ? "image/webp" :
-  //   "application/octet-stream"
 
   setHeader(event, 'Content-Type', 'application/octet-stream')
 

@@ -1,22 +1,22 @@
 import { betterAuth } from 'better-auth'
-import { prismaAdapter } from 'better-auth/adapters/prisma'
-import prisma from './prisma'
+import { drizzleAdapter } from '@better-auth/drizzle-adapter'
+import { db } from './db'
 import { emailOTP } from 'better-auth/plugins/email-otp'
 import nodemailer from 'nodemailer'
 
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST,
   port: 587,
-  secure: false, // use STARTTLS (upgrade connection to TLS after connecting)
+  secure: false,
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASS,
   },
-});
+})
 
 
 export const auth = betterAuth({
-  database: prismaAdapter(prisma, {
+  database: drizzleAdapter(db, {
     provider: 'sqlite',
   }),
   plugins: [

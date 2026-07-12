@@ -9,7 +9,9 @@ This guide covers how to create authenticated file upload and serving endpoints 
 ```typescript
 import path from 'path'
 import fs from 'fs'
-import prisma from '~~/server/utils/prisma'
+import { db } from '~~/server/utils/db'
+import { user } from '~~/server/db/schema'
+import { eq } from 'drizzle-orm'
 import { auth } from '~~/server/utils/auth'
 
 export default defineEventHandler(async (event) => {
@@ -55,12 +57,9 @@ export default defineEventHandler(async (event) => {
   await fs.writeFile(filePath, file.data)
 
   // Update database with image path
-  await prisma.user.update({
-    where: { id: session.user.id },
-    data: {
-      image: path.join('users', session.user.id, 'images', randomImageId),
-    },
-  })
+  await db.update(user).set({
+    image: path.join('users', session.user.id, 'images', randomImageId),
+  }).where(eq(user.id, session.user.id))
 
   setResponseStatus(event, 201)
   return { message: 'Profile picture uploaded successfully' }
@@ -74,6 +73,8 @@ export default defineEventHandler(async (event) => {
 ```typescript
 import fs from 'node:fs'
 import path from 'node:path'
+import { db } from '~~/server/utils/db'
+import { eq } from 'drizzle-orm'
 
 export default defineEventHandler(async (event) => {
   // Get user ID from route parameter
@@ -83,9 +84,9 @@ export default defineEventHandler(async (event) => {
   }
 
   // Fetch image path from database
-  const record = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { image: true },
+  const record = await db.query.user.findFirst({
+    where: (user, { eq }) => eq(user.id, userId),
+    columns: { image: true },
   })
 
   const imagePath = record?.image

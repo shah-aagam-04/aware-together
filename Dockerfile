@@ -15,27 +15,24 @@ RUN npm i -g pnpm
 RUN pnpm i --frozen-lockfile
 
 COPY . ./
-RUN pnpm prisma generate
 RUN pnpm run build
 
 
 # Deployment container
 FROM node:lts-alpine AS deployment
 WORKDIR /app
-# Copy stuff from build container to ensure we have prisma and everything it needs
 COPY --from=builder /app/.output ./
 COPY --from=builder /app/package.json ./
 COPY --from=builder /app/pnpm-lock.yaml ./
 COPY --from=builder /app/pnpm-workspace.yaml ./
-COPY --from=builder /app/prisma ./prisma
-COPY --from=builder /app/prisma.config.ts ./
+COPY --from=builder /app/drizzle ./drizzle
+COPY --from=builder /app/drizzle.config.ts ./
+COPY --from=builder /app/server/db ./server/db
 RUN npm i -g pnpm
 
-# Install Prisma without running any scripts to avoid running nuxt scripts
-RUN pnpm i --dev --ignore-scripts --frozen-lockfile
-# Run the build scripts needed for prisma to work (for migrations and seeding)
-RUN pnpm rebuild esbuild better-sqlite3 @prisma/engines prisma
-RUN pnpm prisma generate
+# Install only tools needed for migration/seed
+RUN pnpm i --frozen-lockfile --dev --ignore-scripts
+RUN pnpm rebuild esbuild better-sqlite3
 COPY --from=builder /app/entrypoint.sh /entrypoint
 
 # Ensure we can actually run the entrypoint script
