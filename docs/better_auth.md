@@ -7,8 +7,8 @@ This guide covers Better Auth implementation for email OTP authentication in Nux
 ### 1. Install Dependencies
 
 ```bash
-npm install better-auth @prisma/adapter-better-sqlite3 nodemailer
-npm install -D prisma @types/nodemailer
+npm install better-auth @better-auth/drizzle-adapter better-sqlite3 nodemailer
+npm install -D drizzle-kit drizzle-orm @types/better-sqlite3 @types/nodemailer
 ```
 
 ### 2. Environment Variables
@@ -21,77 +21,91 @@ BETTER_AUTH_URL=http://localhost:3000
 
 ### 3. Database Configuration
 
-Update `prisma/schema.prisma` with Better Auth models:
+Create `server/db/schema.ts` with Better Auth models using Drizzle:
 
-```prisma
-generator client {
-  provider = "prisma-client"
-  output   = "./generated"
-}
+```typescript
+import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core'
+import { relations } from 'drizzle-orm'
 
-datasource db {
-  provider = "sqlite"
-}
+export const user = sqliteTable('user', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  name: text('name').notNull(),
+  email: text('email').notNull().unique(),
+  emailVerified: integer('emailVerified', { mode: 'boolean' }).notNull().default(false),
+  image: text('image'),
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+})
 
-model User {
-  id            String    @id
-  name          String
-  email         String
-  emailVerified Boolean   @default(false)
-  image         String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  sessions      Session[]
-  accounts      Account[]
+export const session = sqliteTable('session', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  expiresAt: integer('expiresAt', { mode: 'timestamp' }).notNull(),
+  token: text('token').notNull().unique(),
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  ipAddress: text('ipAddress'),
+  userAgent: text('userAgent'),
+  userId: text('userId').notNull().references(() => user.id, { onDelete: 'cascade' }),
+}, (table) => [
+  index('session_userId_idx').on(table.userId),
+])
 
-  @@unique([email])
-  @@map("user")
-}
+export const account = sqliteTable('account', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  accountId: text('accountId').notNull(),
+  providerId: text('providerId').notNull(),
+  userId: text('userId').notNull().references(() => user.id, { onDelete: 'cascade' }),
+  accessToken: text('accessToken'),
+  refreshToken: text('refreshToken'),
+  idToken: text('idToken'),
+  accessTokenExpiresAt: integer('accessTokenExpiresAt', { mode: 'timestamp' }),
+  refreshTokenExpiresAt: integer('refreshTokenExpiresAt', { mode: 'timestamp' }),
+  scope: text('scope'),
+  password: text('password'),
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index('account_userId_idx').on(table.userId),
+])
 
-model Session {
-  id        String   @id
-  expiresAt DateTime
-  token     String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+export const verification = sqliteTable('verification', {
+  id: text('id').primaryKey().$defaultFn(() => crypto.randomUUID()),
+  identifier: text('identifier').notNull(),
+  value: text('value').notNull(),
+  expiresAt: integer('expiresAt', { mode: 'timestamp' }).notNull(),
+  createdAt: integer('createdAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+  updatedAt: integer('updatedAt', { mode: 'timestamp' }).notNull().$defaultFn(() => new Date()),
+}, (table) => [
+  index('verification_identifier_idx').on(table.identifier),
+])
 
-  @@map("session")
-}
+export const userRelations = relations(user, ({ many }) => ({
+  sessions: many(session),
+  accounts: many(account),
+}))
 
-model Account {
-  id                String  @id
-  userId            String
-  type              String
-  provider          String
-  providerAccountId String
-  refresh_token     String?
-  access_token      String?
-  expires_at        Int?
-  token_type        String?
-  scope             String?
-  id_token          String?
-  session_state     String?
-  createdAt         DateTime @default(now())
-  updatedAt         DateTime @updatedAt
-  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+export const sessionRelations = relations(session, ({ one }) => ({
+  user: one(user, { fields: [session.userId], references: [user.id] }),
+}))
 
-  @@unique([provider, providerAccountId])
-  @@map("account")
-}
+export const accountRelations = relations(account, ({ one }) => ({
+  user: one(user, { fields: [account.userId], references: [user.id] }),
+}))
+```
 
-model Verification {
-  id        String   @id @default(cuid())
-  identifier String
-  value     String
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+Configure Drizzle Kit in `drizzle.config.ts`:
 
-  @@unique([identifier, value])
-  @@map("verification")
-}
+```typescript
+import { defineConfig } from 'drizzle-kit'
+
+export default defineConfig({
+  schema: './server/db/schema.ts',
+  out: './drizzle',
+  dialect: 'sqlite',
+  dbCredentials: {
+    url: process.env.DATABASE_URL!,
+  },
+})
 ```
 
 ### 4. Server Auth Configuration
@@ -100,11 +114,11 @@ Create `server/utils/auth.ts`:
 
 ```typescript
 import { betterAuth } from 'better-auth'
-import { prismaAdapter } from 'better-auth/adapters/prisma'
-import { prisma } from './prisma'
+import { drizzleAdapter } from '@better-auth/drizzle-adapter'
+import { db } from './db'
 
 export const auth = betterAuth({
-  database: prismaAdapter(prisma, {
+  database: drizzleAdapter(db, {
     provider: 'sqlite',
   }),
 })
@@ -138,8 +152,8 @@ Update `server/utils/auth.ts`:
 
 ```typescript
 import { betterAuth } from 'better-auth'
-import { prismaAdapter } from 'better-auth/adapters/prisma'
-import { prisma } from './prisma'
+import { drizzleAdapter } from '@better-auth/drizzle-adapter'
+import { db } from './db'
 import { emailOTP } from 'better-auth/plugins/email-otp'
 import nodemailer from 'nodemailer'
 
@@ -152,7 +166,7 @@ const transporter = nodemailer.createTransport({
 })
 
 export const auth = betterAuth({
-  database: prismaAdapter(prisma, {
+  database: drizzleAdapter(db, {
     provider: 'sqlite',
   }),
   plugins: [
@@ -385,8 +399,8 @@ export default defineEventHandler(async (event) => {
   }
 
   // Use authenticated user ID for user-specific operations
-  const userProfile = await prisma.user.findUnique({
-    where: { id: session.user.id },
+  const userProfile = await db.query.user.findFirst({
+    where: (user, { eq }) => eq(user.id, session.user.id),
   })
 
   return userProfile
@@ -454,14 +468,14 @@ export default defineEventHandler(async (event) => {
 
   if (session) {
     // Authenticated user gets full profile
-    return await prisma.user.findUnique({
-      where: { id: session.user.id },
-      include: { sessions: true, accounts: true },
+    return await db.query.user.findFirst({
+      where: (user, { eq }) => eq(user.id, session.user.id),
+      with: { sessions: true, accounts: true },
     })
   } else {
     // Public user gets limited data
-    return await prisma.user.findMany({
-      select: {
+    return await db.query.user.findMany({
+      columns: {
         id: true,
         name: true,
         email: true,
@@ -492,9 +506,9 @@ export default defineEventHandler(async (event) => {
   }
 
   // Full profile for own user
-  return await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
+  return await db.query.user.findFirst({
+    where: (user, { eq }) => eq(user.id, userId),
+    with: {
       sessions: true,
       accounts: true,
       // Add other sensitive fields
@@ -502,4 +516,3 @@ export default defineEventHandler(async (event) => {
   })
 })
 ```
-
