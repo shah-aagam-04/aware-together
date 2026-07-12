@@ -1,6 +1,8 @@
 import path from 'path'
 import fs from 'fs'
-import { prisma } from '~~/server/utils/prisma'
+import { db } from '~~/server/utils/db'
+import { user } from '~~/server/db/schema'
+import { eq } from 'drizzle-orm'
 import { auth } from '~~/server/utils/auth'
 
 export default defineEventHandler(async (event) => {
@@ -47,17 +49,15 @@ export default defineEventHandler(async (event) => {
     if (err) throw err
   })
 
-  // Store the generated image ID in the database as required
-  const addedImage = await prisma.user.update({
-    where: {
-      id: session.user.id,
-    },
-    data: {
-      image: path.join('users', session.user.id, 'images', randomImageId),
-    },
-  })
+  const imagePath = path.join('users', session.user.id, 'images', randomImageId)
 
-  console.log(addedImage)
+  const [updatedUser] = await db
+    .update(user)
+    .set({ image: imagePath, updatedAt: new Date() })
+    .where(eq(user.id, session.user.id))
+    .returning()
+
+  console.log(updatedUser)
 
   setResponseStatus(event, 201)
 

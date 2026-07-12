@@ -1,20 +1,19 @@
-import { prisma } from '../../utils/prisma'
+import { db } from '../../utils/db'
+import { user } from '../../db/schema'
 
 export default defineEventHandler(async (event) => {
-  const users = await prisma.user.findMany({
-    select: {
-      id: true,
-      email: true,
-      name: true,
-      emailVerified: true,
-      image: true,
-    },
-  })
+  const users = await db.select({
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    emailVerified: user.emailVerified,
+    image: user.image,
+  }).from(user)
 
-  const redacted = users.map((user) => {
+  const redacted = users.map((u) => {
     return {
-      ...user,
-      image: user.image != null,
+      ...u,
+      image: u.image != null,
     }
   })
 
