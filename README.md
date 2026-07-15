@@ -1,4 +1,4 @@
-# Nuxt Template (Better Auth + Prisma + SQLite)
+# Nuxt Template (Better Auth + Drizzle + SQLite)
 
 A modern, production-ready Nuxt 4 template featuring a robust authentication system, ORM integration, and a clean UI foundation.
 
@@ -6,7 +6,7 @@ A modern, production-ready Nuxt 4 template featuring a robust authentication sys
 
 - **Nuxt 4**: The latest and greatest from the Nuxt team.
 - **Better Auth**: Comprehensive authentication with **Email OTP** support.
-- **Prisma**: Type-safe ORM for interacting with the database.
+- **Drizzle**: Type-safe ORM for interacting with the database.
 - **SQLite**: Lightweight, zero-configuration database, ideal for development and small-to-medium projects.
 - **Nuxt UI v3**: Beautiful, accessible, and customizable UI components built with Tailwind CSS.
 - **Nodemailer**: Pre-configured for sending verification emails via Gmail.
@@ -15,7 +15,7 @@ A modern, production-ready Nuxt 4 template featuring a robust authentication sys
 
 - **Framework**: [Nuxt](https://nuxt.com/)
 - **Auth**: [Better Auth](https://www.better-auth.com/)
-- **ORM**: [Prisma](https://www.prisma.io/)
+- **ORM**: [Drizzle](https://orm.drizzle.team/)
 - **Database**: [SQLite](https://sqlite.org/)
 - **UI Framework**: [Nuxt UI](https://ui3.nuxt.com/)
 - **Email**: [Nodemailer](https://nodemailer.com/)
@@ -60,10 +60,15 @@ Open `.env` and configure the following:
 ### 4. Database Setup
 
 Initialize your SQLite database and run migrations. You will need to run this command anytime you need to change or create a database.
-If there are any migrations that need to be run, the command will ask for a name for the migration. You can simply hit enter, or name your migration.
 
 ```bash
-pnpm prisma:reset
+pnpm db:migrate
+```
+
+During development, if there are any database changes since the last migration, you will need to generate a new migration.
+
+```bash
+pnpm db:generate
 ```
 
 ### 5. Start the development server
@@ -72,7 +77,7 @@ pnpm prisma:reset
 pnpm dev
 ```
 
-Your application will be available at `http://localhost:3000`. This command also starts **Prisma Studio** automatically.
+Your application will be available at `http://localhost:3000`.
 
 ### 6. How to Login
 
@@ -81,18 +86,19 @@ Login requires an email address that already exists in the database.
 - **Option A: Use the seeded user**
   Go to `/auth` and log in with `email@example.com`.
 - **Option B: Use your own email**
-  Update `prisma/seed.ts` with your email, then run `pnpm prisma:reset` to re-seed.
+  Update `server/db/seed.ts` with your email, then run `pnpm db:seed` to re-seed.
 
 **To get your OTP:**
 
 - Check your configured email inbox.
-- **Or**, check the **Prisma Studio** tab in your browser and look in the `Verification` table.
+- **Or**, run `pnpm db:studio` to open **Drizzle Studio** and look in the `verification` table.
 
 ## Project Structure
 
 - `app/`: Frontend code (pages, components, assets, composables).
 - `server/`: Backend code (API routes, authentication logic, database utilities).
-- `prisma/`: Database schema, migrations, and seed scripts.
+- `server/db/`: Database schema and seed scripts.
+- `drizzle/`: Generated migrations.
 - `public/`: Static assets.
 
 ## GitHub Actions Configuration
