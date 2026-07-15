@@ -5,14 +5,7 @@ import { user } from '../../../db/schema'
 import { eq } from 'drizzle-orm'
 
 export default defineEventHandler(async (event) => {
-  const session = await auth.api.getSession({
-    headers: event.headers,
-  })
-
-  if (!session) {
-    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
-  }
-
+  // Auth is enforced by the gateway (server/middleware/auth.ts).
   const userId = getRouterParam(event, 'id')
 
   if (!userId) {

@@ -3,16 +3,10 @@ import fs from 'fs'
 import { db } from '~~/server/utils/db'
 import { user } from '~~/server/db/schema'
 import { eq } from 'drizzle-orm'
-import { auth } from '~~/server/utils/auth'
 
 export default defineEventHandler(async (event) => {
-  const session = await auth.api.getSession({
-    headers: event.headers,
-  })
-
-  if (!session) {
-    throw createError({ statusCode: 401, statusMessage: 'Unauthorized' })
-  }
+  // Guaranteed by the auth gateway (server/middleware/auth.ts).
+  const currentUser = event.context.user!
 
   const form = await readMultipartFormData(event)
 
@@ -29,7 +23,7 @@ export default defineEventHandler(async (event) => {
   const dirPath = path.join(
     process.env.UPLOAD_STORAGE_PATH || 'public/images',
     'users',
-    session.user.id,
+    currentUser.id,
     'images'
   )
 
@@ -49,12 +43,12 @@ export default defineEventHandler(async (event) => {
     if (err) throw err
   })
 
-  const imagePath = path.join('users', session.user.id, 'images', randomImageId)
+  const imagePath = path.join('users', currentUser.id, 'images', randomImageId)
 
   const [updatedUser] = await db
     .update(user)
     .set({ image: imagePath, updatedAt: new Date() })
-    .where(eq(user.id, session.user.id))
+    .where(eq(user.id, currentUser.id))
     .returning()
 
   console.log(updatedUser)
